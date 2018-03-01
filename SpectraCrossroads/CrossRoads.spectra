@@ -2,14 +2,35 @@ import "DwyerPatterns.spectra"
 
 module CrossRoads
 
+//sum of cars waiting in north and south entrances of the intersection 
 env CarsCount carsWaitingInVerticalRoad;
+
+//sum of cars waiting in east and west entrances of the intersection
 env CarsCount carsWaitingInHorizontalRoad;
+
+//is a vertical car crossing the intersection
 env boolean verticalCarCrossing;
+
+//is a horizontal car crossing the intersection
 env boolean horizontalCarCrossing;
+
+// color of the north and south traffic lights
 sys Color verticalLights;
+
+// color of the east and west traffic lights
 sys Color horizontalLights;
 
+/** number of cars waiting to cross
+ * the maximum value set here gets updated in the java project automatically.
+ * if the number of cars is higher than the noted maximum, the java code will keep 
+ * reporting the maximum value.
+ * note that as this value gets bigger the synthesis takes much longer
+ * (since it increases the number of states drastically)
+ * and may cause eclipse to crash and close
+ */
 type CarsCount = Int(0..30);
+
+//possible traffic light colors (OFF occurs when blinking, and permits crossing like green)
 type Color = {GREEN, RED, OFF};
 
 
@@ -22,21 +43,31 @@ define
 define
   horizontalLineIsLonger := carsWaitingInHorizontalRoad>carsWaitingInVerticalRoad;
 
+//evaluates to true if traffic light is green or off
 predicate go(Color trafficLight)
 {
   trafficLight = GREEN | trafficLight = OFF
 }
 
+//evaluates to true if car is not crossing now but crosses in the next state
 predicate carStartsToCross(boolean carIsCrossing)
 {
   !carIsCrossing & next(carIsCrossing)
 }
 
+//evaluates to true if traffic light says STOP causes cars not to cross
 predicate onDontGoCarsDontCross(Color light, boolean carCrossing)
 {
   !go(light) -> ! carCrossing
 }
 
+/**
+ * monitors if the system is waiting for a car to clear the intersection.
+ * initially monitor is false.
+ * becomes true after traffic light becomes red and stays so until
+ * environment says that the no cars are crossing the intersection
+ * note that only the environment can change the monitor state after it turns true; 
+ */
 monitor boolean waitingForVerticalCarToPass{
   !waitingForVerticalCarToPass;
   G next(waitingForVerticalCarToPass) = 
@@ -49,29 +80,43 @@ monitor boolean waitingForHorizontalCarToPass{
       ((waitingForHorizontalCarToPass | !go(horizontalLights)) & horizontalCarCrossing);
 }
 
+//start with clear board with no cars and empty queues.
 asm freshStart:
  carsWaitingInVerticalRoad=0 & carsWaitingInHorizontalRoad=0 &
  !verticalCarCrossing & !horizontalCarCrossing;
 
+/**it is the environments responsibility to eventually keep the above monitors false
+ * practically means that the env is responsible to stop crossing the intersection
+ * if the light is red
+ */
 asm GF !waitingForVerticalCarToPass;
 asm GF !waitingForHorizontalCarToPass;
 
+
+//cars don't start crossing unless the system says go
 asm verticalCarsWillNotStartCrossingUnlessTrafficLightSaysGo:
   G (carStartsToCross(verticalCarCrossing)->go(verticalLights));
 asm horizontalCarsWillNotStartCrossingUnlessTrafficLightSaysGo:
   G  (carStartsToCross(horizontalCarCrossing) -> go(horizontalLights));
 
+//waiting line becomes shorter only if traffic light says go. cars don't just disappear
 asm ifVerticalDontGoLineWillNotShrink:
   G next(carsWaitingInHorizontalRoad) < carsWaitingInHorizontalRoad -> go(horizontalLights);
 asm ifHorizontalDontGoLineWillNotShrink:
   G next(carsWaitingInVerticalRoad) < carsWaitingInVerticalRoad -> go(verticalLights);
 
-
+//blinking means switching from green to off and vice versa
 predicate blinkBeforeSwitchingToRed(Color light)
 {
   light = OFF & next(light = GREEN) | light=GREEN & next(light=OFF)
 }
 
+/**
+ * counters of the amount of blinks.
+ * initially 0 , increment when blinking
+ * resets when the other traffic lights say go
+ * overflow is not allowed
+ */
 counter verticalBlinks(0..3) {
     verticalBlinks=0;
     inc: blinkBeforeSwitchingToRed(verticalLights);
@@ -86,15 +131,18 @@ counter horizontalBlinks(0..3) {
     overflow: false;
 }
 
+//this is the main guarantee...
 gar preventDisasters:
   G !accident;
 
+//eventually respond with GO to the line that is longer 
 gar eventualyGiveGoToVerticalIfLineIsLonger:
   pRespondsToS(verticalLineIsLonger,go(verticalLights));
 
 gar eventualyGiveGoToHorizontalIfLineIsLonger:
   pRespondsToS(horizontalLineIsLonger,go(horizontalLights));
 
+//don't just switch lights. turn red only if the other line is longer
 gar stopVerticalCarsOnlyIfOtherLineIsBigger:
   pBecomesTrue_betweenQandR(horizontalLineIsLonger, go(verticalLights) , verticalBlinks>0);
 
@@ -102,22 +150,30 @@ gar stopHorizontalCarsOnlyIfOtherLineIsBigger:
   pBecomesTrue_betweenQandR(verticalLineIsLonger, go(horizontalLights) , horizontalBlinks>0);
 
 
+//blinking 3 times is mandatory before switching from green to red.
 gar alwaysBlinkBeforeChangingGoToNotGoForHorizontal:
   pBecomesTrue_betweenQandR(horizontalBlinks=3,go(horizontalLights),!go(horizontalLights));
 gar alwaysBlinkBeforeChangingGoToNotGoForVertical:
 pBecomesTrue_betweenQandR(verticalBlinks=3,go(verticalLights),!go(verticalLights));
 
+//never use the off light unless in the midst of blinking
 gar useVerticalOffOnlyWhenBlinking:
   G next(verticalLights = OFF) -> blinkBeforeSwitchingToRed(verticalLights);
 gar useHorizontalOffOnlyWhenBlinking:
   G next(horizontalLights = OFF) -> blinkBeforeSwitchingToRed(horizontalLights);
 
+//keep blinking until blinked 3 times
 gar keepBlinkingVerticalIfNotYet3Times:
   G verticalBlinks > 0 & verticalBlinks <3 -> blinkBeforeSwitchingToRed(verticalLights);
 gar keepBlinkingHorizontalIfNotYet3Times:
   G horizontalBlinks > 0 & horizontalBlinks <3 -> blinkBeforeSwitchingToRed(horizontalLights);
 
-
+/**
+ * prevent the same light switching from red to green again unless the car is still crossing
+ * keeps the traffic lights changes in a more ordinal fashion, but not absolutely mandatory.
+ * may be removed and still synthesis will eventually give the longer line go, and will
+ * still prevent accidents.
+ */
 gar verticalGreenAfterRedOnlyIfVerticalCarNotCrossing:
   G next(go(verticalLights)) & !go(verticalLights) -> !verticalCarCrossing;
 gar horizontalGreenAfterRedOnlyIfVerticalCarNotCrossing:
