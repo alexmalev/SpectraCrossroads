@@ -1,0 +1,127 @@
+import "DwyerPatterns.spectra"
+
+module CrossRoads
+
+env CarsCount carsWaitingInVerticalRoad;
+env CarsCount carsWaitingInHorizontalRoad;
+env boolean verticalCarCrossing;
+env boolean horizontalCarCrossing;
+sys Color verticalLights;
+sys Color horizontalLights;
+
+type CarsCount = Int(0..30);
+type Color = {GREEN, RED, OFF};
+
+
+define
+  accident:= verticalCarCrossing & horizontalCarCrossing;
+
+define
+  verticalLineIsLonger := carsWaitingInVerticalRoad>carsWaitingInHorizontalRoad;
+
+define
+  horizontalLineIsLonger := carsWaitingInHorizontalRoad>carsWaitingInVerticalRoad;
+
+predicate go(Color trafficLight)
+{
+  trafficLight = GREEN | trafficLight = OFF
+}
+
+predicate carStartsToCross(boolean carIsCrossing)
+{
+  !carIsCrossing & next(carIsCrossing)
+}
+
+predicate onDontGoCarsDontCross(Color light, boolean carCrossing)
+{
+  !go(light) -> ! carCrossing
+}
+
+monitor boolean waitingForVerticalCarToPass{
+  !waitingForVerticalCarToPass;
+  G next(waitingForVerticalCarToPass) = 
+      ((waitingForVerticalCarToPass | !go(verticalLights)) & verticalCarCrossing);
+}
+
+monitor boolean waitingForHorizontalCarToPass{
+  !waitingForHorizontalCarToPass;
+  G next(waitingForHorizontalCarToPass) = 
+      ((waitingForHorizontalCarToPass | !go(horizontalLights)) & horizontalCarCrossing);
+}
+
+asm freshStart:
+ carsWaitingInVerticalRoad=0 & carsWaitingInHorizontalRoad=0 &
+ !verticalCarCrossing & !horizontalCarCrossing;
+
+asm GF !waitingForVerticalCarToPass;
+asm GF !waitingForHorizontalCarToPass;
+
+asm verticalCarsWillNotStartCrossingUnlessTrafficLightSaysGo:
+  G (carStartsToCross(verticalCarCrossing)->go(verticalLights));
+asm horizontalCarsWillNotStartCrossingUnlessTrafficLightSaysGo:
+  G  (carStartsToCross(horizontalCarCrossing) -> go(horizontalLights));
+
+asm ifVerticalDontGoLineWillNotShrink:
+  G next(carsWaitingInHorizontalRoad) < carsWaitingInHorizontalRoad -> go(horizontalLights);
+asm ifHorizontalDontGoLineWillNotShrink:
+  G next(carsWaitingInVerticalRoad) < carsWaitingInVerticalRoad -> go(verticalLights);
+
+
+predicate blinkBeforeSwitchingToRed(Color light)
+{
+  light = OFF & next(light = GREEN) | light=GREEN & next(light=OFF)
+}
+
+counter verticalBlinks(0..3) {
+    verticalBlinks=0;
+    inc: blinkBeforeSwitchingToRed(verticalLights);
+    reset: go(horizontalLights);
+    overflow: false;
+}
+
+counter horizontalBlinks(0..3) {
+    horizontalBlinks=0;
+    inc: blinkBeforeSwitchingToRed(horizontalLights);
+    reset: go(verticalLights);
+    overflow: false;
+}
+
+gar preventDisasters:
+  G !accident;
+
+gar eventualyGiveGoToVerticalIfLineIsLonger:
+  pRespondsToS(verticalLineIsLonger,go(verticalLights));
+
+gar eventualyGiveGoToHorizontalIfLineIsLonger:
+  pRespondsToS(horizontalLineIsLonger,go(horizontalLights));
+
+gar stopVerticalCarsOnlyIfOtherLineIsBigger:
+  pBecomesTrue_betweenQandR(horizontalLineIsLonger, go(verticalLights) , verticalBlinks>0);
+
+gar stopHorizontalCarsOnlyIfOtherLineIsBigger:
+  pBecomesTrue_betweenQandR(verticalLineIsLonger, go(horizontalLights) , horizontalBlinks>0);
+
+
+gar alwaysBlinkBeforeChangingGoToNotGoForHorizontal:
+  pBecomesTrue_betweenQandR(horizontalBlinks=3,go(horizontalLights),!go(horizontalLights));
+gar alwaysBlinkBeforeChangingGoToNotGoForVertical:
+pBecomesTrue_betweenQandR(verticalBlinks=3,go(verticalLights),!go(verticalLights));
+
+gar useVerticalOffOnlyWhenBlinking:
+  G next(verticalLights = OFF) -> blinkBeforeSwitchingToRed(verticalLights);
+gar useHorizontalOffOnlyWhenBlinking:
+  G next(horizontalLights = OFF) -> blinkBeforeSwitchingToRed(horizontalLights);
+
+gar keepBlinkingVerticalIfNotYet3Times:
+  G verticalBlinks > 0 & verticalBlinks <3 -> blinkBeforeSwitchingToRed(verticalLights);
+gar keepBlinkingHorizontalIfNotYet3Times:
+  G horizontalBlinks > 0 & horizontalBlinks <3 -> blinkBeforeSwitchingToRed(horizontalLights);
+
+
+gar verticalGreenAfterRedOnlyIfVerticalCarNotCrossing:
+  G next(go(verticalLights)) & !go(verticalLights) -> !verticalCarCrossing;
+gar horizontalGreenAfterRedOnlyIfVerticalCarNotCrossing:
+  G next(go(horizontalLights)) & !go(horizontalLights) -> !horizontalCarCrossing;
+
+
+
