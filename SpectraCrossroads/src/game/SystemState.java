@@ -1,5 +1,9 @@
 package game;
 
+/**
+ * holds the traffic light state of the spectra system.
+ *
+ */
 public class SystemState {
     private Color verticalLight;
     private Color horizontalLight;

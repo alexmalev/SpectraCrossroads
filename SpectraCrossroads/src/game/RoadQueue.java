@@ -3,7 +3,10 @@ package game;
 
 import java.util.LinkedList;
 
-
+/**
+ * holds a queue of cars and the traffic light state for that queue
+ *
+ */
 public class RoadQueue {
     private LinkedList<Vehicle> queue = new LinkedList<>();
 

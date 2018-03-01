@@ -7,6 +7,10 @@ import java.io.IOException;
 import java.util.HashSet;
 import java.util.Set;
 
+/**
+ * holds the state of the intersections, its 4 roadQueus, its 4 waiting lists and its graphics.
+ *
+ */
 public class Intersection {
     private Tuple position;
     private Set<Vehicle> waitingNorth = new HashSet<>();
@@ -37,7 +41,11 @@ public class Intersection {
     public Tuple getPosition() {
         return position;
     }
-
+    /**
+     * gets the queue of cars for a given direction of the intersection
+     * @param direction
+     * @return
+     */
     public RoadQueue getEntrance(Direction direction) {
         switch (direction){
             case EAST:
@@ -51,6 +59,12 @@ public class Intersection {
         }
         return null;
     }
+    
+    /**
+     * gets the waiting list for a given direction of the intersection
+     * @param direction
+     * @return
+     */
     public Set<Vehicle> getWaitingList(Direction direction){
         switch (direction){
             case EAST:

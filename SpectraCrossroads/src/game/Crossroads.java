@@ -13,6 +13,10 @@ import java.util.regex.Pattern;
 import java.util.zip.ZipEntry;
 import java.util.zip.ZipInputStream;
 
+/**
+ * holds the UI components and the main application
+ *
+ */
 @SuppressWarnings("serial")
 public class Crossroads extends JPanel {
     private GameBoard gameBoard;
@@ -25,11 +29,22 @@ public class Crossroads extends JPanel {
     private static JSlider horizontalSlider;
     private static JSlider controllerSlider;
 
-
+    /**
+     * constructor.
+     * sets up the game board
+     * @throws IOException
+     */
     private Crossroads() throws IOException {
         gameBoard = new GameBoard();
     }
-
+    /**
+     * initialize an infinite loop that iterates every 30 ms:
+     * gets user input from sliders
+     * sets environment state based on the cars in the game board
+     * controls the traffic lights by the spectra synthesized controller in the specified interval
+     * repaints the updated game board
+     * @throws Exception
+     */
     private void run() throws Exception {
         loadController();
         long i = 0;
@@ -44,7 +59,12 @@ public class Crossroads extends JPanel {
             Thread.sleep(30);
         }
     }
-
+    /**
+     * allows the user to interact with the game by setting 3 parameters in the sliders:
+     * a. the frequency of the incoming cars in the vertical road
+     * b. the frequency of the incoming cars in the horizontal road
+     * c. the time interval in which spectra updates the traffic lights
+     */
     private void getUserInputFromSliders() {
         if (!verticalSlider.getValueIsAdjusting() & gameBoard.verticalMax != verticalSlider.getValue()) {
             gameBoard.verticalMax = verticalSlider.getValue();
@@ -66,7 +86,9 @@ public class Crossroads extends JPanel {
             controllerInterval = controllerSlider.getValue();
         }
     }
-
+    /**
+     * initializes the spectra controller from the synthesized spectra file
+     */
     private void loadController() {
         BDDPackage.setCurrPackage(BDDPackage.JTLV);
         try {
@@ -77,7 +99,15 @@ public class Crossroads extends JPanel {
         currentState = ctrl.initial().id();
         initialState = true;
     }
-
+    /**
+     * where the magic happens.
+     * based on the environment state (cars on the road) 
+     * determines the possible next traffic light actions
+     * based on the spectra spec.
+     * chooses one of the possible actions randomly.
+     * 
+     * @throws InterruptedException
+     */
     private void updateSpectraState() throws InterruptedException {
         if (initialState) {
             BDD one = currentState.satOne(Env.globalUnprimeVars());
@@ -104,7 +134,12 @@ public class Crossroads extends JPanel {
         controlLightsWithSpectra(systemState);
     }
 
-
+    /**
+     * prints all of the variable values in a nice string
+     * and gets the actual values of the system vars to control the traffic lights.
+     * @param stateVals the values of the current state
+     * @return an object of the current SystemState
+     */
     private SystemState getSystemState(String[] stateVals) {
         Color verticalLight = null;
         Color horizontalLight = null;
@@ -155,6 +190,12 @@ public class Crossroads extends JPanel {
         return new SystemState(verticalLight, horizontalLight);
     }
 
+    /**
+     * sets the environment variables in the synthesized spec according to the cars on the board
+     * calculates number of waiting cars in each road as the sum of waiting cars on both ways.
+     * @param succs the next allowed states
+     * @return the subset of states filtered to the newly assigned environment vars
+     */
     private BDD setVehiclesState(BDD succs) {
         int waitingNorth = gameBoard.getIntersection().getWaitingList(Direction.SOUTH).size();
         int waitingSouth = gameBoard.getIntersection().getWaitingList(Direction.NORTH).size();
@@ -162,20 +203,28 @@ public class Crossroads extends JPanel {
         int waitingWest = gameBoard.getIntersection().getWaitingList(Direction.EAST).size();
         int verticalWaiting = waitingNorth + waitingSouth < lineMax ? waitingNorth + waitingSouth : lineMax;
         int horizontalWaiting = waitingEast + waitingWest < lineMax ? waitingEast + waitingWest : lineMax;
-        String carMainCrossing = String.valueOf(gameBoard.isMainPassing());
-        String carSideCrossing = String.valueOf(gameBoard.isSidePassing());
+        String carMainCrossing = String.valueOf(gameBoard.isVerticalPassing());
+        String carSideCrossing = String.valueOf(gameBoard.isHorizontalPassing());
         return succs.and(Env.getBDDValue("carsWaitingInVerticalRoad", verticalWaiting))
                 .and(Env.getBDDValue("carsWaitingInHorizontalRoad", horizontalWaiting))
                 .and(Env.getBDDValue("verticalCarCrossing", carMainCrossing))
                 .and(Env.getBDDValue("horizontalCarCrossing", carSideCrossing));
     }
-
+    
+    /**
+     * controls the traffic lights according to the selected system state.
+     * @param systemState
+     */
     private void controlLightsWithSpectra(SystemState systemState) {
         gameBoard.getIntersection().getEntrance(Direction.NORTH).setLight(systemState.getVerticalLight());
         gameBoard.getIntersection().getEntrance(Direction.SOUTH).setLight(systemState.getVerticalLight());
         gameBoard.getIntersection().getEntrance(Direction.EAST).setLight(systemState.getHorizontalLight());
         gameBoard.getIntersection().getEntrance(Direction.WEST).setLight(systemState.getHorizontalLight());
     }
+    /**
+     * sets up the UI of the application
+     * @param crossroadsGame an instance of the game board
+     */
     private static void createAndShowGUI(Crossroads crossroadsGame) {
         UIManager.put("swing.boldMetal", Boolean.FALSE);
         JFrame window = new JFrame("Crossroads");
@@ -226,7 +275,13 @@ public class Crossroads extends JPanel {
         window.setVisible(true);
         window.setResizable(false);
     }
-
+    /**
+     * finds the maximum number of cars specified in the spectra file
+     * in type CarsCount = Int(0..<max number>);
+     * using regex. 
+     * @param line: a chunk of the spectra file
+     * @return the max number of cars or -1 if no match was found
+     */
     private int findMaxLineCount(String line) {
         int result = -1;
         line = line.replaceAll("\\s+", "");
@@ -238,7 +293,13 @@ public class Crossroads extends JPanel {
         }
         return result;
     }
-
+    /**
+     * gets the maximum number of cars allowed in the spectra file
+     * in type CarsCount = Int(0..<max number>);
+     * and overrides the default value of 5.
+     * prevents an overflow of value not expected by the spec.
+     * @throws IOException
+     */
     private void getMaxCarsFromSpectraFile() throws IOException {
         String fileToBeExtracted = "SpectraCrossroads/CrossRoads.spectra";
         String zipPackage = "./out/spec.zip";

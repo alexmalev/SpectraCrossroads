@@ -2,6 +2,10 @@ package game;
 
 import java.util.Objects;
 
+/**
+ * a coords tuple serving each element on the board
+ *
+ */
 public class Tuple {
     private int x;
     private int y;

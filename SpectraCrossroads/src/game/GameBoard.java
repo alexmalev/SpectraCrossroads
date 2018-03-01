@@ -5,24 +5,43 @@ import java.awt.*;
 import java.io.IOException;
 import java.util.*;
 
+/**
+ * holds the state of the game: number of cars, cars crossing, and traffic lights
+ */
 public class GameBoard {
     private static Random rand = new Random();
 
     private Map<Tuple, Tile> boardMap = new HashMap<>();
     private int horizontalTiles = 20;
     private int verticalTiles = 15;
-
     private Intersection intersection;
     private RoadQueue southExit;
     private RoadQueue northExit;
     private RoadQueue eastExit;
     private RoadQueue westExit;
+    int eastTurn = 0;
+    int westTurn = 0;
+    int horizontalMin = 30;
+    int horizontalMax = 31;
+    int nextEast = getRandomInt(horizontalMin, horizontalMax);
+    int nextWest = getRandomInt(horizontalMin, horizontalMax);
+
+    int northTurn = 0;
+    int southTurn = 0;
+    int verticalMin = 30;
+    int verticalMax = 31;
+    int nextNorth = getRandomInt(verticalMin, verticalMax);
+    int nextSouth = getRandomInt(verticalMin, verticalMax);
 
 
     GameBoard() throws IOException {
         generateBoard();
     }
-
+    
+    /**
+     * initializes an empty board and its UI;
+     * @throws IOException
+     */
     private void generateBoard() throws IOException {
         Tuple intersectionPosition = insertIntersection();
         this.intersection = new Intersection(intersectionPosition);
@@ -34,6 +53,11 @@ public class GameBoard {
         insertGrass();
     }
 
+    /**
+     * inserts an intersection Tile in the board
+     * @return a Tuple of the intersections coords
+     * @throws IOException
+     */
     private Tuple insertIntersection() throws IOException {
         int intersectionX = horizontalTiles / 2;
         int intersectionY = verticalTiles / 2;
@@ -41,7 +65,12 @@ public class GameBoard {
         boardMap.put(position, new Tile(TileType.INTERSECTION));
         return position;
     }
-
+    
+    /**
+     * inserts road tiles on the board relative to the intersection coords
+     * @param intersectionPosition
+     * @throws IOException
+     */
     private void insertRoads(Tuple intersectionPosition) throws IOException {
         for (int i = 0; i < horizontalTiles; i++) {
             Tuple tilePosition = new Tuple(i, intersectionPosition.getY());
@@ -56,6 +85,10 @@ public class GameBoard {
             boardMap.put(tilePosition, new Tile(TileType.VERTICAL));
         }
     }
+    /**
+     * inserts grass tiles in all the vacant positions
+     * @throws IOException
+     */
     private void insertGrass() throws IOException {
         for (int i = 0; i < horizontalTiles; i++) {
             for (int j = 0; j < verticalTiles; j++) {
@@ -65,7 +98,10 @@ public class GameBoard {
             }
         }
     }
-
+    /**
+     * draws the board with all the elements and the count of waiting cars.
+     * @param g
+     */
     void draw(Graphics g) {
         for (Tuple tuple : boardMap.keySet()) {
             boardMap.get(tuple).draw(tuple, g);
@@ -108,24 +144,18 @@ public class GameBoard {
     }
 
 
-    int eastTurn = 0;
-    int westTurn = 0;
-    int horizontalMin = 30;
-    int horizontalMax = 31;
-    int nextEast = getRandomInt(horizontalMin, horizontalMax);
-    int nextWest = getRandomInt(horizontalMin, horizontalMax);
 
-    int northTurn = 0;
-    int southTurn = 0;
-    int verticalMin = 30;
-    int verticalMax = 31;
-    int nextNorth = getRandomInt(verticalMin, verticalMax);
-    int nextSouth = getRandomInt(verticalMin, verticalMax);
 
     int getRandomInt(int min, int max) {
         return rand.nextInt((max + 1) - min) + min;
     }
 
+    /**
+     * updates the game board.
+     * shoots new cars to the board in the required time intervals
+     * controls all the vehicles on the board.
+     * @throws IOException
+     */
     void updateGameBoard() throws IOException {
         eastTurn++;
         westTurn++;
@@ -155,6 +185,11 @@ public class GameBoard {
         controlVehicles();
     }
 
+    /**
+     * controls the vehicles on the board:
+     * moves cars that can move, removes cars that have left the screen,
+     * and stops cars that cannot move.
+     */
     private void controlVehicles() {
         LinkedList<Vehicle> southExit = this.southExit.getQueue();
         LinkedList<Vehicle> northExit = this.northExit.getQueue();
@@ -178,6 +213,11 @@ public class GameBoard {
 
     }
 
+    /**
+     * controls vehicles that have passed an intersection and are towards an exit.
+     * moves them until they have left the screen then removes them.
+     * @param exit
+     */
     private void controlExit(LinkedList<Vehicle> exit) {
         for (ListIterator<Vehicle> iterator = exit.listIterator(); iterator.hasNext(); ) {
             Vehicle currentVehicle = iterator.next();
@@ -187,7 +227,12 @@ public class GameBoard {
             }
         }
     }
-
+    
+    /**
+     * Determines if a given car has left the screen.
+     * @param currentVehicle
+     * @return
+     */
     private boolean leftTheScreen(Vehicle currentVehicle) {
         switch (currentVehicle.getDirection()) {
             case SOUTH:
@@ -201,7 +246,15 @@ public class GameBoard {
         }
         return false;
     }
-
+    
+    /**
+     * controls the cars in a given queue.
+     * moves them if they can move.
+     * adds them to the waiting list if they cannot.
+     * passes them to the exit queue 
+     * and removes them from the waiting list if they entered the intersection
+     * @param queue
+     */
     private void controlVehiclesInQueue(LinkedList<Vehicle> queue) {
         for (ListIterator<Vehicle> iterator = queue.listIterator(); iterator.hasNext(); ) {
             Vehicle currentVehicle = iterator.next();
@@ -241,6 +294,13 @@ public class GameBoard {
         return intersection.getEntrance(direction).isCanPass();
     }
 
+    /**
+     * determines if a given vehicle can move
+     * returns true if it is not behind a standing car or if it is not at a red light.
+     * @param currentVehicle
+     * @param vehicleInFront
+     * @return
+     */
     private boolean hasSpaceToMove(Vehicle currentVehicle, Vehicle vehicleInFront) {
         switch (currentVehicle.getDirection()) {
             case SOUTH:
@@ -255,6 +315,10 @@ public class GameBoard {
         return false;
     }
 
+    /**
+     * pass a give vehicle from the intersection queue to the exit queue
+     * @param vehicle
+     */
     private void passVehicleToNextQueue(Vehicle vehicle) {
         switch (vehicle.getDirection()) {
             case SOUTH:
@@ -273,6 +337,11 @@ public class GameBoard {
         intersection.getWaitingList(vehicle.getDirection()).remove(vehicle);
     }
 
+    /**
+     * determines if a given vehicle is at the entrance to an intersection
+     * @param vehicle
+     * @return
+     */
     private boolean isFirstVehicleBeforeIntersection(Vehicle vehicle) {
         switch (vehicle.getDirection()) {
             case SOUTH:
@@ -288,18 +357,31 @@ public class GameBoard {
 
     }
 
-    public boolean isSidePassing() {
+    /**
+     * determines if the intersection is occupied by a horizontal vehicle
+     * @return
+     */
+    public boolean isHorizontalPassing() {
 
         return isVehicleInIntersection(eastExit.getQueue()) || isVehicleInIntersection(westExit.getQueue());
 
     }
-
-    public boolean isMainPassing() {
+    
+    /**
+     * determines if the intersection is occupied by a vertical vehicle
+     * @return
+     */
+    public boolean isVerticalPassing() {
 
         return isVehicleInIntersection(northExit.getQueue()) || isVehicleInIntersection(southExit.getQueue());
 
     }
 
+    /**
+     * determines if a vehicle from an exit queue is still in the intersection
+     * @param queue
+     * @return
+     */
     private boolean isVehicleInIntersection(LinkedList<Vehicle> queue) {
         if (queue.size() == 0)
             return false;
@@ -317,7 +399,11 @@ public class GameBoard {
         return false;
     }
 
-
+    /**
+     * determines if a given vehicle is not yet arrived to intersection
+     * @param vehicle
+     * @return
+     */
     private boolean isFirstNotYetInIntersection(Vehicle vehicle) {
         switch (vehicle.getDirection()) {
             case SOUTH:

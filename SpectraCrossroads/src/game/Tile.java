@@ -6,6 +6,10 @@ import java.awt.image.BufferedImage;
 import java.io.File;
 import java.io.IOException;
 
+/**
+ * an object of graphics for a tile in the game board
+ *
+ */
 public class Tile {
     private BufferedImage tileImage;
     Tile(TileType type) throws IOException {
