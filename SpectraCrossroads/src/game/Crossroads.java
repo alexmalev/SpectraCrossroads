@@ -136,6 +136,7 @@ public class Crossroads extends JPanel {
 
     /**
      * prints all of the variable values in a nice string
+     * (needed because the default spectra print function cant handle that many vars) 
      * and gets the actual values of the system vars to control the traffic lights.
      * @param stateVals the values of the current state
      * @return an object of the current SystemState
